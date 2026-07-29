@@ -1,156 +1,114 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
+import {
+  LiveKitRoom,
+  useTracks,
+  VideoTrack,
+} from '@livekit/components-react';
+import '@livekit/components-styles';
+import { Track } from 'livekit-client';
 
 const LiveStream = () => {
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [token, setToken] = useState("");
   const [error, setError] = useState(null);
-  
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const imgRef = useRef(null);
-  const wsRef = useRef(null);
-  const streamRef = useRef(null);
-  const intervalRef = useRef(null);
-  const isProcessingRef = useRef(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  const serverUrl = import.meta.env.VITE_LIVEKIT_URL;
 
   const startStream = async () => {
-    setError(null);
     try {
-      // 1. Get webcam stream
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-      streamRef.current = stream;
+      // Clear old token to force reconnect
+      setToken("");
+      setError(null);
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/livekit-token`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch token');
       }
-
-      // 2. Connect to WebSocket
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
-      wsRef.current = new WebSocket(`${wsUrl}/api/ws/stream`);
       
-      wsRef.current.onopen = () => {
-        setIsStreaming(true);
-        isProcessingRef.current = false;
-        
-        // 3. Start sending frames with backpressure
-        intervalRef.current = setInterval(() => {
-          if (isProcessingRef.current) return; // Skip if backend is still processing the last frame
-          
-          if (videoRef.current && canvasRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            
-            const videoWidth = videoRef.current.videoWidth;
-            const videoHeight = videoRef.current.videoHeight;
-            
-            // Wait until video has actually started playing and has dimensions
-            if (videoWidth > 0 && videoHeight > 0) {
-              isProcessingRef.current = true;
-              
-              // Ensure canvas matches video dimensions exactly to prevent squishing (which hurts YOLO accuracy)
-              if (canvasRef.current.width !== videoWidth) {
-                canvasRef.current.width = videoWidth;
-                canvasRef.current.height = videoHeight;
-              }
-              
-              const context = canvasRef.current.getContext('2d');
-              context.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight);
-              
-              // Get base64 image data (Higher quality 0.9 preserves phone details for the model)
-              const imageData = canvasRef.current.toDataURL('image/jpeg', 0.9);
-              wsRef.current.send(imageData);
-            }
-          }
-        }, 100); // Max 10 FPS
-      };
-
-      wsRef.current.onmessage = (event) => {
-        isProcessingRef.current = false; // Ready for next frame
-        if (imgRef.current && event.data.startsWith('data:image')) {
-          imgRef.current.src = event.data;
-        }
-      };
-
-      wsRef.current.onerror = (err) => {
-        setError('WebSocket connection error.');
-        stopStream();
-      };
-      
-      wsRef.current.onclose = () => {
-        stopStream();
-      };
-
+      setToken(data.token);
+      setIsStreaming(true);
     } catch (err) {
-      setError('Could not access webcam: ' + err.message);
+      setError(err.message);
     }
   };
 
   const stopStream = () => {
+    setToken("");
     setIsStreaming(false);
-    
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-    
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    
-    if (imgRef.current) {
-      imgRef.current.src = "";
-    }
   };
-
-  useEffect(() => {
-    return () => {
-      // Cleanup on unmount
-      stopStream();
-    };
-  }, []);
 
   return (
     <div className="card">
-      <h2>Live Camera Stream</h2>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-        Use your webcam to detect phone usage in real-time.
-      </p>
+      <h2>Live Camera Monitoring</h2>
+      <p>Real-time AI analysis with ultra-low latency WebRTC (LiveKit).</p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={{ position: 'relative', width: '640px', maxWidth: '100%', height: '480px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '1.5rem', boxShadow: 'var(--shadow-md)' }}>
-          {/* Hidden video element to capture webcam */}
-          <video ref={videoRef} style={{ display: 'none' }} width="640" height="480" muted></video>
-          {/* Hidden canvas to extract frames */}
-          <canvas ref={canvasRef} width="640" height="480" style={{ display: 'none' }}></canvas>
-          
-          {/* Display element for annotated frames */}
-          {isStreaming ? (
-            <img 
-              ref={imgRef} 
-              alt="Live Stream" 
-              src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-            />
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#fff', opacity: 0.5 }}>
-              Camera Offline
-            </div>
-          )}
-        </div>
-        
-        {error && <p className="error-msg" style={{ marginBottom: '1rem' }}>{error}</p>}
-        
-        <button 
-          className="btn-primary" 
-          onClick={isStreaming ? stopStream : startStream}
-          style={{ backgroundColor: isStreaming ? '#e74c3c' : 'var(--primary-blue)' }}
-        >
-          {isStreaming ? 'Stop Stream' : 'Start Camera'}
-        </button>
+      <div style={{ 
+        position: 'relative', 
+        width: '100%', 
+        aspectRatio: '4/3', 
+        background: 'var(--bg-color)', 
+        borderRadius: '12px', 
+        overflow: 'hidden', 
+        marginTop: '2rem', 
+        border: '1px solid var(--border-color)',
+        boxShadow: 'var(--shadow-lg)'
+      }}>
+        {isStreaming && token ? (
+          <LiveKitRoom
+            video={true} // Automatically ask for user's camera permissions and publish it
+            audio={false}
+            token={token}
+            serverUrl={serverUrl}
+            style={{ height: '100%' }}
+            onDisconnected={stopStream}
+          >
+            <AIStreamViewer />
+          </LiveKitRoom>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+            Camera Offline
+          </div>
+        )}
       </div>
+
+      <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+        {!isStreaming ? (
+          <button className="btn-primary" onClick={startStream}>
+            Start Camera
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={stopStream} style={{ background: 'var(--danger-color)' }}>
+            Stop Camera
+          </button>
+        )}
+      </div>
+
+      {error && <div className="error-msg">{error}</div>}
     </div>
   );
 };
+
+// Component to render ONLY the remote AI annotated track
+function AIStreamViewer() {
+  const trackRefs = useTracks([Track.Source.Camera]);
+  
+  // Filter for remote tracks (which will be the AI agent)
+  const remoteTracks = trackRefs.filter(t => !t.participant.isLocal);
+
+  return (
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg-color)' }}>
+      {remoteTracks.length > 0 ? (
+        <VideoTrack trackRef={remoteTracks[0]} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-secondary)', flexDirection: 'column' }}>
+          <div className="loader"></div>
+          <p style={{ marginTop: '1rem' }}>Waiting for AI Agent to join...</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default LiveStream;

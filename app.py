@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import base64
 from dotenv import load_dotenv
+from livekit.api import AccessToken, VideoGrants
 
 load_dotenv()
 
@@ -36,6 +37,23 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Attention Monitor API"}
+
+@app.get("/api/livekit-token")
+def get_livekit_token(room: str = "attention-room", participant_name: str = "user"):
+    # Requires LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env
+    api_key = os.getenv("LIVEKIT_API_KEY")
+    api_secret = os.getenv("LIVEKIT_API_SECRET")
+    
+    if not api_key or not api_secret or api_key == "your_api_key":
+        return JSONResponse(status_code=500, content={"error": "LiveKit credentials not configured in .env"})
+        
+    grant = VideoGrants(room_join=True, room=room)
+    token = AccessToken(api_key, api_secret) \
+        .with_identity(participant_name) \
+        .with_name(participant_name) \
+        .with_grants(grant)
+        
+    return {"token": token.to_jwt()}
 
 @app.post("/api/process-image")
 async def process_image(file: UploadFile = File(...)):
