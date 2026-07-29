@@ -1,0 +1,23 @@
+# Environments
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Outputs & temporary files
+output/
+test.jpg
+temp_*.mp4
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
