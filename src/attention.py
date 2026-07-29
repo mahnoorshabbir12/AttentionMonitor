@@ -12,11 +12,11 @@ class AttentionMonitor:
         Processes a single BGR frame, detects objects, and draws bounding boxes.
         Returns the annotated frame.
         """
-        # Run inference on the frame
-        results = self.model(frame, verbose=False)
+        # Run inference on the frame (adjust conf threshold for better accuracy)
+        results = self.model(frame, conf=0.5, verbose=False)
         
-        # Plot the results on the frame
-        annotated_frame = results[0].plot()
+        # Plot the results on the frame without confidence scores
+        annotated_frame = results[0].plot(conf=False)
         return annotated_frame
 
     def predict(self, image):

@@ -5,14 +5,36 @@ const VideoProcessor = () => {
   const [resultVideoUrl, setResultVideoUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFile = (file) => {
     if (file && file.type.startsWith('video/')) {
       setSelectedFile(file);
       setResultVideoUrl(null);
       setError(null);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    handleFile(e.target.files[0]);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -58,7 +80,14 @@ const VideoProcessor = () => {
       </p>
 
       {!selectedFile && !resultVideoUrl ? (
-        <div className="upload-zone" onClick={handleUploadClick}>
+        <div 
+          className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+          onClick={handleUploadClick}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          style={{ borderColor: isDragging ? 'var(--primary-blue)' : 'var(--border-color)', background: isDragging ? 'rgba(74, 144, 226, 0.05)' : 'var(--bg-color)' }}
+        >
           <input
             type="file"
             accept="video/*"
