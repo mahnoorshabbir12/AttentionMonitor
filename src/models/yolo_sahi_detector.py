@@ -63,7 +63,7 @@ class YoloSahiDetector:
     def _predict_normal(self, frame):
         # We don't hardcode imgsz=1280 here. YOLOv8n native imgsz (640) will be used by default 
         # or it can dynamically scale depending on the Ultralytics configuration.
-        results = self.model_native(frame, conf=self.conf_threshold, iou=0.45, verbose=False)
+        results = self.model_native(frame, conf=self.conf_threshold, iou=0.3, imgsz=1280, verbose=False)
         boxes_out = []
         if len(results) > 0 and results[0].boxes is not None:
             boxes = results[0].boxes

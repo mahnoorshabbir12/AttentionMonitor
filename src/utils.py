@@ -97,9 +97,7 @@ def _process_with_ffmpeg(cap, output_path, ffmpeg_path, fps, width, height, tota
             if not ret:
                 break
 
-            # Only run inference every 5th frame to speed up processing
-            run_inference = (frame_count % 5 == 0)
-            annotated_frame = monitor.process_frame(frame, run_inference=run_inference)
+            annotated_frame = monitor.process_frame(frame)
 
             # Pad to even dimensions if needed
             if annotated_frame.shape[1] != out_width or annotated_frame.shape[0] != out_height:

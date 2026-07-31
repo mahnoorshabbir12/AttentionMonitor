@@ -4,7 +4,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import base64
@@ -75,49 +75,21 @@ async def process_image(file: UploadFile = File(...)):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/process-video")
-async def process_video(request: Request, file: UploadFile = File(...)):
+async def process_video(file: UploadFile = File(...)):
     try:
-        # Save uploaded video to a temporary file
+        import asyncio
+
         temp_input_filename = f"temp_{uuid.uuid4().hex}.mp4"
         temp_input_path = os.path.join(OUTPUT_DIR, temp_input_filename)
-        
+
         with open(temp_input_path, "wb") as f:
             f.write(await file.read())
-            
-        import asyncio
-        import threading
-        
-        cancel_event = threading.Event()
-        
-        # Process video in a threadpool to prevent blocking the event loop
-        # We wrap it in a task so we can monitor client disconnection
-        async def run_processing():
-            return await asyncio.to_thread(process_video_file, temp_input_path, OUTPUT_DIR, monitor, cancel_event)
-            
-        task = asyncio.create_task(run_processing())
-        
-        # Poll for disconnection while task runs
-        while not task.done():
-            if await request.is_disconnected():
-                cancel_event.set()
-                # We can't actually kill the thread, but cancel_event will stop the loop inside it
-                task.cancel()
-                break
-            # Wait a short amount of time before polling again
-            await asyncio.sleep(0.5)
-            
-        if await request.is_disconnected():
-            if os.path.exists(temp_input_path):
-                os.remove(temp_input_path)
-            return JSONResponse(status_code=499, content={"error": "Client Closed Request"})
-            
-        output_path = task.result()
-        
-        # Clean up input temp file
+
+        output_path = await asyncio.to_thread(process_video_file, temp_input_path, OUTPUT_DIR, monitor)
+
         if os.path.exists(temp_input_path):
             os.remove(temp_input_path)
-            
-        # Return the output file
+
         return FileResponse(output_path, media_type="video/mp4", filename="processed_video.mp4")
     except Exception as e:
         import traceback
