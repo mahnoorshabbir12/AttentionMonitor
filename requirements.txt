@@ -5,3 +5,5 @@ opencv-python
 python-multipart
 websockets
 python-dotenv
+imageio
+imageio-ffmpeg

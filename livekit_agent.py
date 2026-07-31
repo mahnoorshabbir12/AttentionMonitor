@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from livekit import rtc, api
-from src.attention import AttentionMonitor
+from src.inference.detection_pipeline import AttentionMonitor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("livekit-agent")
@@ -52,6 +52,9 @@ async def process_track(room: rtc.Room, track: rtc.RemoteVideoTrack, monitor: At
     await room.local_participant.publish_track(local_track, publish_options)
     logger.info("Published AI-annotated track to room.")
 
+    # State for inference task
+    inference_task = None
+
     # Stream incoming frames
     video_stream = rtc.VideoStream(track)
     async for event in video_stream:
@@ -66,8 +69,17 @@ async def process_track(room: rtc.Room, track: rtc.RemoteVideoTrack, monitor: At
             # RGBA -> BGR for OpenCV / YOLO
             img_bgr = cv2.cvtColor(img_rgba, cv2.COLOR_RGBA2BGR)
 
-            # Run YOLO inference
-            annotated = monitor.process_frame(img_bgr)
+            # Frame dropping logic: Run inference only if not already running
+            if inference_task is None or inference_task.done():
+                # Start new inference in background
+                inference_task = asyncio.create_task(
+                    asyncio.to_thread(monitor.process_frame, img_bgr, True)
+                )
+                # Display current tracked boxes instantly (using the locked state from previous frames)
+                annotated = monitor.process_frame(img_bgr, run_inference=False)
+            else:
+                # Inference is busy. Drop this frame's inference, but render current tracks and advance miss counts
+                annotated = monitor.process_frame(img_bgr, run_inference=False)
 
             # BGR -> RGBA for LiveKit
             out_rgba = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGBA)
@@ -91,7 +103,7 @@ async def main():
         return
 
     # Load model once
-    model_path = os.getenv("MODEL_PATH", "models/phone-classification.pt")
+    model_path = os.getenv("MODEL_PATH", "models/exp.onnx")
     monitor = AttentionMonitor(model_path)
     logger.info(f"YOLO model loaded: {model_path}")
 
